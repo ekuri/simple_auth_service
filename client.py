@@ -3,6 +3,8 @@ import socket
 import argparse
 import json
 
+from lib.link import socket_recv_all, decode_rsp, socket_send_all
+
 
 def CreateArgParse():
     parser = argparse.ArgumentParser()
@@ -59,11 +61,24 @@ def CreateArgParse():
 if __name__ == "__main__":
     parser = CreateArgParse()
     args = parser.parse_args()
+    if not args.cmd:
+        parser.print_usage()
+        exit(0)
     req_data = json.dumps(args.__dict__)
 
     # send to server
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     client.connect(('localhost', 8000))
 
-    client.sendall(req_data.encode('utf-8'))
+    socket_send_all(client, req_data)
+    rsp = socket_recv_all(client)
+    if rsp:
+        status, msg = decode_rsp(rsp)
+        if msg:
+            print('%s: %s' % (status, msg))
+        else:
+            print('%s' % status)
+    else:
+        print('Server failed with no reason')
+
     client.close()
