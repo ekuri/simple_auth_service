@@ -37,6 +37,7 @@ class Role:
             self.users[user.name] = user
 
     def on_delete(self):
+        role_store.pop(self.name)
         for username, user in self.users.items():
             user.remove_role(self.name)
 
@@ -47,10 +48,12 @@ class Token:
         self.token = token
         self.born = born
         self.user = user
+        token_store[self.token] = self
 
     def invalid(self):
         self.user.remove_token()
         token_store.pop(self.token, None)
+        print('token invalid: %s' % self.token)
 
     def is_valid(self):
         t = time.time()
@@ -70,6 +73,8 @@ class User:
     def on_delete(self):
         for role_name, role_obj in self.role.items():
             role_obj.delete_user(self.name)
+        if self.token:
+            self.token.invalid()
 
     def add_role(self, role_name):
         if self.role.get(role_name, None):
@@ -80,12 +85,11 @@ class User:
             return False
 
         role_obj.add_user(self)
+        self.role[role_name] = role_obj
         return True
 
     def remove_role(self, role_name):
-        role_obj = self.role.get(role_name, None)
-        if role_obj:
-            role_obj.delete_user(self.name)
+        self.role.pop(role_name, None)
 
     def auth(self, password):
         challenge = link_encrypt(password, self.salf)
@@ -97,7 +101,7 @@ class User:
 
         start_time = time.time()
         t = link_encrypt(password, time.time())
-        self.token[t] = Token(t, start_time, self)
+        self.token = Token(t, start_time, self)
         return t
 
     def remove_token(self):
@@ -141,7 +145,7 @@ def create_role(req):
     if role_store.get(role, None):
         return False, 'Role already exist'
 
-    role_store[role] = []
+    role_store[role] = Role(role)
     print('Role %s created' % role)
     return True, ''
 
@@ -244,7 +248,7 @@ def query_role(req):
         token_obj.invalid()
         return False, 'Invalid token'
 
-    return True, 'User role: %s' % ','.join(token.user.role.keys())
+    return True, 'User role: [%s]' % ','.join(token_obj.user.role.keys())
 
 
 cmd_handle = {
@@ -261,24 +265,30 @@ cmd_handle = {
 
 
 def handle_client(client_socket: socket.socket):
-    req_data = socket_recv_all(client_socket)
-    req_data = json.loads(req_data)
-    print("request data:", req_data)
+    try:
+        req_data = socket_recv_all(client_socket)
+        req_data = json.loads(req_data)
+        print("request data:", req_data)
 
-    cmd = req_data.get('cmd', None)
-    handle = cmd_handle.get(cmd, None)
-    if not handle:
-        send_err(client_socket, 'Not such action')
-        return
+        cmd = req_data.get('cmd', None)
+        handle = cmd_handle.get(cmd, None)
+        if not handle:
+            send_err(client_socket, 'Not such action')
+            return
 
-    status, msg = handle(req_data)
-    print(status)
-    if status:
-        send_ok(client_socket, msg)
-    else:
-        send_err(client_socket, msg)
-
-    client_socket.close()
+        status, msg = handle(req_data)
+        # print(status)
+        if status:
+            send_ok(client_socket, msg)
+        else:
+            send_err(client_socket, msg)
+    except:
+        raise
+    finally:
+        client_socket.close()
+        print(user_store)
+        print(role_store)
+        print(token_store)
 
 
 if __name__ == "__main__":

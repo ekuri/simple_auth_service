@@ -72,6 +72,8 @@ if __name__ == "__main__":
 
     socket_send_all(client, req_data)
     rsp = socket_recv_all(client)
+    client.close()
+
     if rsp:
         status, msg = decode_rsp(rsp)
         if msg:
@@ -80,5 +82,3 @@ if __name__ == "__main__":
             print('%s' % status)
     else:
         print('Server failed with no reason')
-
-    client.close()
